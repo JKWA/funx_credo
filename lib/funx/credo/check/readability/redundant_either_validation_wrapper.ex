@@ -3,7 +3,47 @@ defmodule Funx.Credo.Check.Readability.RedundantEitherValidationWrapper do
 
   use Credo.Check,
     base_priority: :normal,
-    category: :readability
+    category: :refactor,
+    explanations: [
+      check: """
+      When validation functions return `:ok` or `{:error, reason}`, manually
+      wrapping these results in `Either.right` or `Either.left` is redundant.
+
+      The Either DSL can automatically adapt validation results, or you can use
+      the `validate [...]` syntax which handles this conversion.
+
+      ## Examples
+
+      Bad:
+
+          either user do
+            bind fn u ->
+              case validate_age(u) do
+                :ok -> Either.right(u)
+                {:error, reason} -> Either.left(reason)
+              end
+            end
+          end
+
+      Good (using validate in Either block):
+
+          either user do
+            validate validate_age()
+          end
+
+      Good (using Either adapter):
+
+          validate_age(user)
+          |> Either.from_result()
+
+      ## Rationale
+
+      The Funx Either DSL provides built-in adapters for common Elixir patterns.
+      Manual wrapping adds boilerplate and obscures the validation logic.
+
+      """,
+      params: []
+    ]
 
   @impl true
   def run(source_file, params \\ []) do

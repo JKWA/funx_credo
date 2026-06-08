@@ -2,30 +2,81 @@ defmodule Funx.Credo.Check.Readability.PreferPredicateDSL do
   @dialyzer :no_behaviours
 
   use Credo.Check,
-    base_priority: :normal,
-    category: :readability
+    base_priority: :low,
+    category: :readability,
+    param_defaults: [min_terms: 4],
+    explanations: [
+      check: """
+      Predicate functions with multiple boolean conditions may be more readable
+      using Funx's Predicate DSL, especially when checking domain policy rules
+      over known struct types.
 
-  @minimum_boolean_terms 4
+      This check uses heuristics to identify good candidates while avoiding cases
+      where the Predicate DSL would be a poor fit.
+
+      ## Examples
+
+      Bad (4+ boolean conditions):
+
+          defp retryable?(%Result{} = result) do
+            result.answer_present? and
+              result.citations_present? and
+              result.grounded? and
+              not result.failure_text?
+          end
+
+      Good (using Predicate DSL):
+
+          defp retryable?(%Result{} = result) do
+            predicate =
+              pred do
+                check :answer_present?, IsTrue
+                check :citations_present?, IsTrue
+                check :grounded?, IsTrue
+                check :failure_text?, IsFalse
+              end
+
+            predicate.(result)
+          end
+
+      ## When this check is NOT triggered
+
+      This check intentionally avoids flagging cases where Predicate DSL is a poor fit:
+
+      - Functions with fewer than the configured minimum boolean terms (default: 4)
+      - Functions not named with `?` suffix (not predicate functions)
+      - Loose external maps with string-key access
+      - String classifier predicates (contains?, starts_with?, etc.)
+      - Collection inspection logic (Enum operations)
+      - IO-heavy calls (database queries, HTTP requests)
+
+      """,
+      params: [
+        min_terms: "Minimum number of boolean terms to trigger this check (default: 4)"
+      ]
+    ]
+
   @string_classifier_functions [:contains?, :starts_with?, :ends_with?, :match?]
   @io_like_modules [Ash, Clerk.Documents, Req, Repo]
 
   @impl true
   def run(source_file, params \\ []) do
     issue_meta = IssueMeta.for(source_file, params)
-    Credo.Code.prewalk(source_file, &traverse(&1, &2, issue_meta))
+    min_terms = Keyword.get(params, :min_terms, 4)
+    Credo.Code.prewalk(source_file, &traverse(&1, &2, issue_meta, min_terms))
   end
 
-  defp traverse({definition, meta, [head, body]} = ast, issues, issue_meta)
+  defp traverse({definition, meta, [head, body]} = ast, issues, issue_meta, min_terms)
        when definition in [:def, :defp] do
     if predicate_function_head?(head) and not has_guard_clause?(head) and
-         predicate_dsl_candidate?(head, body) do
+         predicate_dsl_candidate?(head, body, min_terms) do
       {ast, [issue_for(issue_meta, meta[:line]) | issues]}
     else
       {ast, issues}
     end
   end
 
-  defp traverse(ast, issues, _issue_meta), do: {ast, issues}
+  defp traverse(ast, issues, _issue_meta, _min_terms), do: {ast, issues}
 
   defp has_guard_clause?({:when, _, _}), do: true
   defp has_guard_clause?(_head), do: false
@@ -40,11 +91,11 @@ defmodule Funx.Credo.Check.Readability.PreferPredicateDSL do
 
   defp predicate_function_head?(_head), do: false
 
-  defp predicate_dsl_candidate?(head, body) do
+  defp predicate_dsl_candidate?(head, body, min_terms) do
     expression = unwrap_body(body)
 
     boolean_chain?(expression) and
-      boolean_term_count(expression) >= @minimum_boolean_terms and
+      boolean_term_count(expression) >= min_terms and
       not contains_predicate_dsl?(expression) and
       not false_positive_shape?(expression) and
       domain_policy_shape?(head, expression)

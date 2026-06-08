@@ -3,7 +3,47 @@ defmodule Funx.Credo.Check.Readability.PreferLiftPredicateValidator do
 
   use Credo.Check,
     base_priority: :normal,
-    category: :readability
+    category: :refactor,
+    explanations: [
+      check: """
+      Validation helper functions that simply wrap `Either.lift_predicate/3` should
+      usually be expressed using the `LiftPredicate` validator directly in the
+      `validate [...]` step.
+
+      This keeps validation logic inline and reduces unnecessary function indirection.
+
+      ## Examples
+
+      Bad:
+
+          defp validate_positive(n) do
+            Either.lift_predicate(n, &(&1 > 0), :not_positive)
+          end
+
+          either id do
+            bind fetch_value()
+            bind validate_positive()
+          end
+
+      Good:
+
+          either id do
+            bind fetch_value()
+            validate LiftPredicate.validate(
+              pred: &(&1 > 0),
+              message: fn _ -> :not_positive end
+            )
+          end
+
+      ## Rationale
+
+      The LiftPredicate validator is designed to be used inline in validation
+      steps. Creating wrapper functions adds indirection without clear benefit,
+      unless the predicate logic is complex enough to warrant extraction.
+
+      """,
+      params: []
+    ]
 
   @impl true
   def run(source_file, params \\ []) do

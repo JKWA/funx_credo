@@ -2,8 +2,47 @@ defmodule Funx.Credo.Check.Readability.EitherWrappedResultTuple do
   @dialyzer :no_behaviours
 
   use Credo.Check,
-    base_priority: :normal,
-    category: :readability
+    base_priority: :high,
+    category: :readability,
+    explanations: [
+      check: """
+      Either.left and Either.right represent error and success channels respectively.
+      Wrapping result tuples like `{:ok, value}` or `{:error, reason}` creates
+      unnecessary double-wrapping since Either already provides that structure.
+
+      ## Examples
+
+      Bad:
+
+          either id do
+            bind fn user_id ->
+              case fetch_user(user_id) do
+                {:ok, user} -> Either.right({:ok, user})  # Double-wrapped!
+                {:error, reason} -> Either.left({:error, reason})  # Double-wrapped!
+              end
+            end
+          end
+
+      Good:
+
+          either id do
+            bind fn user_id ->
+              case fetch_user(user_id) do
+                {:ok, user} -> Either.right(user)
+                {:error, reason} -> Either.left(reason)
+              end
+            end
+          end
+
+      ## Rationale
+
+      Either.left already represents an error, so wrapping it in `{:error, ...}`
+      is redundant. Similarly, Either.right already represents success, so
+      `{:ok, ...}` adds no value.
+
+      """,
+      params: []
+    ]
 
   @impl true
   def run(source_file, params \\ []) do

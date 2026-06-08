@@ -2,8 +2,51 @@ defmodule Funx.Credo.Check.Readability.PreferEitherPartialApplication do
   @dialyzer :no_behaviours
 
   use Credo.Check,
-    base_priority: :normal,
-    category: :readability
+    base_priority: :low,
+    category: :readability,
+    explanations: [
+      check: """
+      When `bind`, `map`, or `tap` operations use an inline lambda that only places
+      the pipeline value as the first argument to a function call, partial application
+      is more concise and idiomatic.
+
+      ## Examples
+
+      Bad:
+
+          either bytes do
+            bind fn image_bytes -> get_metadata(image_bytes, filename, categories) end
+          end
+
+      Good:
+
+          either bytes do
+            bind get_metadata(filename, categories)
+          end
+
+      Bad:
+
+          either user do
+            map fn u -> transform(u, options) end
+          end
+
+      Good:
+
+          either user do
+            map transform(options)
+          end
+
+      ## When this check is NOT triggered
+
+      This check avoids flagging cases where the lambda does more than simple threading:
+
+      - The piped value is transformed before use (e.g., `Base.encode64(bytes)`)
+      - The piped value appears in multiple arguments
+      - The lambda body contains complex logic
+
+      """,
+      params: []
+    ]
 
   @impl true
   def run(source_file, params \\ []) do

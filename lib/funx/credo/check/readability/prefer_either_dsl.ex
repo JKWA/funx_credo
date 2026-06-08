@@ -2,19 +2,80 @@ defmodule Funx.Credo.Check.Readability.PreferEitherDSL do
   @dialyzer :no_behaviours
 
   use Credo.Check,
-    base_priority: :normal,
-    category: :readability
+    base_priority: :low,
+    category: :readability,
+    param_defaults: [min_clauses: 2],
+    explanations: [
+      check: """
+      Multi-clause `with` statements and nested `case` expressions that follow
+      simple Either-shaped patterns may be more readable using Funx's Either DSL.
+
+      This check uses heuristics to identify good candidates while avoiding cases
+      where native Elixir control flow is clearer.
+
+      ## Examples
+
+      Bad (simple linear pipeline):
+
+          with {:ok, user} <- fetch_user(id),
+               {:ok, account} <- fetch_account(user.account_id) do
+            {:ok, account}
+          else
+            {:error, reason} -> {:error, reason}
+          end
+
+      Good (using Either DSL):
+
+          either id, as: :tuple do
+            bind fetch_user()
+            bind fn user -> fetch_account(user.account_id) end
+          end
+
+      Bad (nested case):
+
+          case fetch_user(id) do
+            {:ok, user} ->
+              case fetch_account(user.account_id) do
+                {:ok, account} -> {:ok, account}
+                {:error, reason} -> {:error, reason}
+              end
+            {:error, reason} -> {:error, reason}
+          end
+
+      Good (using Either DSL):
+
+          either id, as: :tuple do
+            bind fetch_user()
+            bind fn user -> fetch_account(user.account_id) end
+          end
+
+      ## When this check is NOT triggered
+
+      This check intentionally avoids flagging cases where `with` or `case` are clearer:
+
+      - Success logic needs multiple independently bound values
+      - Earlier bound values are reused in later clauses
+      - Nested case appears in error branch (fallback logic)
+      - Pattern matching involves non-Either shapes
+      - `with` has fewer than the configured minimum clauses (default: 2)
+
+      """,
+      params: [
+        min_clauses: "Minimum number of clauses in `with` to trigger this check (default: 2)"
+      ]
+    ]
 
   @impl true
   def run(source_file, params \\ []) do
     issue_meta = IssueMeta.for(source_file, params)
-    Credo.Code.prewalk(source_file, &traverse(&1, &2, issue_meta))
+    min_clauses = Keyword.get(params, :min_clauses, 2)
+    Credo.Code.prewalk(source_file, &traverse(&1, &2, issue_meta, min_clauses))
   end
 
-  defp traverse({:with, meta, args} = ast, issues, issue_meta) do
+  defp traverse({:with, meta, args} = ast, issues, issue_meta, min_clauses) do
     clauses = Enum.filter(args, &match?({:<-, _, _}, &1))
 
-    if length(clauses) >= 2 and either_with_candidate?(clauses) and
+    if length(clauses) >= min_clauses and either_with_candidate?(clauses) and
          not ignore_multi_value_with?(clauses, args) do
       {ast, [issue_for_with(issue_meta, meta[:line]) | issues]}
     else
@@ -22,7 +83,7 @@ defmodule Funx.Credo.Check.Readability.PreferEitherDSL do
     end
   end
 
-  defp traverse({:case, _meta, [_expr, [do: clauses]]} = ast, issues, issue_meta) do
+  defp traverse({:case, _meta, [_expr, [do: clauses]]} = ast, issues, issue_meta, _min_clauses) do
     new_issues =
       if either_case_candidate?(clauses) do
         Enum.reduce(clauses, issues, fn
@@ -44,7 +105,7 @@ defmodule Funx.Credo.Check.Readability.PreferEitherDSL do
     {ast, new_issues}
   end
 
-  defp traverse(ast, issues, _issue_meta), do: {ast, issues}
+  defp traverse(ast, issues, _issue_meta, _min_clauses), do: {ast, issues}
 
   defp ignore_multi_value_with?(clauses, args) do
     used_vars = do_block_used_vars(args)

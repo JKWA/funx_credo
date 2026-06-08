@@ -2,8 +2,41 @@ defmodule Funx.Credo.Check.Readability.ConsecutiveEitherValidations do
   @dialyzer :no_behaviours
 
   use Credo.Check,
-    base_priority: :normal,
-    category: :readability
+    base_priority: :high,
+    category: :readability,
+    explanations: [
+      check: """
+      Multiple consecutive `validate` steps in an Either block can be combined into
+      a single `validate [...]` list for better readability and performance.
+
+      The Either DSL supports passing a list of validations that will all be checked,
+      with the first failure short-circuiting the computation.
+
+      ## Examples
+
+      Bad:
+
+          either id do
+            bind fetch_value()
+            validate check_not_nil()
+            validate check_positive()
+            validate check_in_range()
+          end
+
+      Good:
+
+          either id do
+            bind fetch_value()
+            validate [
+              check_not_nil(),
+              check_positive(),
+              check_in_range()
+            ]
+          end
+
+      """,
+      params: []
+    ]
 
   @impl true
   def run(source_file, params \\ []) do

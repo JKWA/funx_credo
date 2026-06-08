@@ -3,7 +3,50 @@ defmodule Funx.Credo.Check.Readability.BindValidateNaming do
 
   use Credo.Check,
     base_priority: :normal,
-    category: :readability
+    category: :consistency,
+    explanations: [
+      check: """
+      In the Either DSL, `bind` is used for transformations that return Either
+      values, while `validate` is used for precondition checks.
+
+      When a `bind` operation calls a function named with the `validate_*` prefix,
+      it creates semantic confusion about whether this is a transformation or a
+      validation check.
+
+      ## Examples
+
+      Bad:
+
+          either user do
+            bind validate_permissions()  # Stops on first error, loses other validation failures
+            bind validate_account_status()
+          end
+
+      Good (collect all validation errors):
+
+          either user do
+            validate [
+              check_permissions(),
+              check_account_status()
+            ]
+          end
+
+      Good (if it's actually a transformation that returns Either):
+
+          either user do
+            bind load_permissions()  # Clear transformation, not validate_*
+          end
+
+      ## Rationale
+
+      Clear naming helps readers understand the flow:
+      - `bind` with `validate_*` -> semantic mismatch
+      - `validate` with `check_*` or predicates -> clear validation
+      - `bind` with transformation verbs -> clear transformation
+
+      """,
+      params: []
+    ]
 
   @impl true
   def run(source_file, params \\ []) do
