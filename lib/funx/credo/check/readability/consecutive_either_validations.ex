@@ -44,7 +44,7 @@ defmodule Funx.Credo.Check.Readability.ConsecutiveEitherValidations do
     Credo.Code.prewalk(source_file, &traverse(&1, &2, issue_meta))
   end
 
-  defp traverse({:either, _meta, args} = ast, issues, issue_meta) do
+  defp traverse({:either, _meta, args} = ast, issues, issue_meta) when is_list(args) do
     operations =
       args
       |> extract_do_block()

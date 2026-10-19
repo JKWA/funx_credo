@@ -87,6 +87,23 @@ defmodule Funx.Credo.ConsecutiveEitherValidationsCheckTest do
     assert issues == []
   end
 
+  test "does not crash on a variable named either" do
+    issues =
+      run_check(
+        Funx.Credo.Check.Readability.ConsecutiveEitherValidations,
+        """
+        defmodule Example do
+          def run(value) do
+            either = build(value)
+            check(either)
+          end
+        end
+        """
+      )
+
+    assert issues == []
+  end
+
   defp run_check(check, source, filename \\ "lib/example.ex") do
     source
     |> SourceFile.parse(filename)

@@ -134,6 +134,20 @@ defmodule Funx.Credo.Check.Readability.PreferEitherDSLTest do
     assert issues == []
   end
 
+  test "does not crash on a variable named with" do
+    issues =
+      run_check("""
+      defmodule Example do
+        def run(value) do
+          with = build(value)
+          check(with)
+        end
+      end
+      """)
+
+    assert issues == []
+  end
+
   defp run_check(source, filename \\ "lib/example.ex") do
     source
     |> SourceFile.parse(filename)

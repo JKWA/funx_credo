@@ -72,7 +72,8 @@ defmodule Funx.Credo.Check.Readability.PreferEitherDSL do
     Credo.Code.prewalk(source_file, &traverse(&1, &2, issue_meta, min_clauses))
   end
 
-  defp traverse({:with, meta, args} = ast, issues, issue_meta, min_clauses) do
+  defp traverse({:with, meta, args} = ast, issues, issue_meta, min_clauses)
+       when is_list(args) do
     clauses = Enum.filter(args, &match?({:<-, _, _}, &1))
 
     if length(clauses) >= min_clauses and either_with_candidate?(clauses) and
